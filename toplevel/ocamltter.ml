@@ -4,7 +4,7 @@ module Spot = Spotlib.Spot
 open Twitter
 open Util
 
-let curl_handle_tweak _ = ()
+let curl_handle_tweak = ref (fun _ -> () : Curl.handle -> unit)
 
 module TTS = GoogleTTS
 
@@ -76,7 +76,7 @@ module Auth = struct
 
   let authorize app (_, verif as verified_token : VerifiedToken.t) = 
     let app_consumer = app.App.consumer in
-    match Auth.fetch_access_token ~curl_handle_tweak app_consumer verified_token with
+    match Auth.fetch_access_token ~curl_handle_tweak:!curl_handle_tweak app_consumer verified_token with
     | `Ok (username, token) ->
         let oauth = Auth.oauth app_consumer (token, verif) in
         username, { User.token = oauth.Oauth.access_token;
@@ -86,7 +86,7 @@ module Auth = struct
         failwithf "oauth http failed(%d): %s" st err
   
   let authorize_interactive app = 
-    match Auth.fetch_request_token ~curl_handle_tweak app.App.consumer with
+    match Auth.fetch_request_token ~curl_handle_tweak:!curl_handle_tweak app.App.consumer with
     | `Ok (url, req_resp_token) ->
         print_endline & "Please grant access to " ^ app.App.name ^ " and get a PIN at :";
         print_endline & "  " ^ url;
@@ -137,7 +137,8 @@ let get_oauth () = match !cached_oauth with
       cached_oauth := Some oauth;
       oauth
 
-let get_handle () = { Api11.oauth = get_oauth (); curl_handle_tweak }
+let get_handle () = { Api11.oauth = get_oauth (); 
+                      curl_handle_tweak = !curl_handle_tweak }
       
 let setup () = 
   prerr_endline "getting oauth...";

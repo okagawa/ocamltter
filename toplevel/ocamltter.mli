@@ -2,6 +2,11 @@ open Twitter
 open Auth
 open Api_intf
 
+val curl_handle_tweak : (Curl.handle -> unit) ref
+(** This function is executed against for each cURL handle object just before the net access.
+    Good to add proxy settings and other net tweaks here.
+*)
+
 exception Error of [`Http of int * string
                    | `Json of Json.t Meta_conv.Error.t 
                    | `Json_parse of exn * string
