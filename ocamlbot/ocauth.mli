@@ -29,9 +29,9 @@ module Auth : sig
 
   val oauth : App.t -> User.t -> Oauth.t
 
-  val authorize : App.t -> VerifiedToken.t -> string * User.t
+  val authorize : curl_handle_tweak:(Curl.handle -> unit) -> App.t -> VerifiedToken.t -> string * User.t
 
-  val authorize_interactive : App.t -> string (** username *) * User.t
+  val authorize_interactive : curl_handle_tweak:(Curl.handle -> unit) -> App.t -> string (** username *) * User.t
 
   val load : string -> tbl
   val save : string -> tbl -> unit
@@ -41,5 +41,5 @@ end
 module Single : sig
   val save : string -> User.t -> unit
   val load : string -> User.t
-  val oauth : string -> App.t -> Oauth.t
+  val oauth : curl_handle_tweak:(Curl.handle -> unit) -> string -> App.t -> Twitter.Oauth.t
 end

@@ -22,6 +22,8 @@ let app, user =
 let o = Ocauth.Auth.oauth app user
 let () = prerr_endline "oauth done"
 
+let h = { oauth = o; curl_handle_tweak = fun _ -> () }
+
 let is_ocaml_misspell = 
   let rex = <:m<ocaml/i>> in
   let rec loop text = 
@@ -41,7 +43,7 @@ let do_ocaml_misspell tw =
   let text = tw#text in
   if is_ocaml_misspell text then begin
     !!% "%Ld: %s@." tw#id text;
-    begin match Tweets.show o tw#id with
+    begin match Tweets.show h tw#id with
     | `Ok tw' ->
         !!% "%Ld: %s@." tw'#id tw'#text;
         assert (tw#id = tw'#id);
@@ -49,7 +51,7 @@ let do_ocaml_misspell tw =
     | `Error e ->
         !!% "ERROR: @[%a@]@." Api11.Error.format_error e
     end;
-    match Favorites.create o tw#id with
+    match Favorites.create h tw#id with
     | `Ok _ -> !!% "OK@."
     | `Error e ->
         !!% "ERROR: @[%a@]@." Api11.Error.format_error e
@@ -57,7 +59,7 @@ let do_ocaml_misspell tw =
     !!% "XXX: %s@." text
 
 let rec loop since_id = 
-  match Search.tweets o ~count:100 ?since_id "ocaml" with
+  match Search.tweets h ~count:100 ?since_id "ocaml" with
   | `Error (`Http _) -> 
       prerr_endline "HTTP";
       Unix.sleep 600;

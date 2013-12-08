@@ -13,15 +13,23 @@ module VerifiedToken : sig
 end
 
 val oauth : Consumer.t -> VerifiedToken.t -> Oauth.t
-val fetch_request_token : Consumer.t -> 
-  (string (* URL *) * Token.t, 
-   [> `Http of int * string ]) Meta_conv.Result.t
-val fetch_access_token  : Consumer.t -> VerifiedToken.t -> 
-  (string (* username *) * Token.t, 
-   [> `Http of int * string ]) Meta_conv.Result.t
+
+val fetch_request_token : 
+  curl_handle_tweak:(Curl.handle -> unit) 
+  -> Consumer.t 
+  -> (string (* URL *) * Token.t, 
+      [> `Http of int * string ]) Meta_conv.Result.t
+
+val fetch_access_token  : 
+  curl_handle_tweak:(Curl.handle -> unit)
+  -> Consumer.t 
+  -> VerifiedToken.t 
+  -> (string (* username *) * Token.t, 
+      [> `Http of int * string ]) Meta_conv.Result.t
 
 val access : 
-  [`HTTP | `HTTPS]
+  curl_handle_tweak:(Curl.handle -> unit)
+  -> [`HTTP | `HTTPS]
   -> Oauth.t 
   -> Http.meth 
   -> string (* host name *)

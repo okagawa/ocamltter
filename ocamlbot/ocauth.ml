@@ -72,9 +72,9 @@ module Auth = struct
     save path & Hashtbl.of_list 1 [dummy1.app.App.name, dummy1; 
                                    dummy2.app.App.name, dummy2]
 
-  let authorize app (_, verif as verified_token : VerifiedToken.t) = 
+  let authorize ~curl_handle_tweak app (_, verif as verified_token : VerifiedToken.t) = 
     let app_consumer = app.App.consumer in
-    match Auth.fetch_access_token app_consumer verified_token with
+    match Auth.fetch_access_token ~curl_handle_tweak app_consumer verified_token with
     | `Ok (username, token) ->
         let oauth = Auth.oauth app_consumer (token, verif) in
         username, { User.token = oauth.Oauth.access_token;
@@ -83,14 +83,14 @@ module Auth = struct
     | `Error (`Http (st, err)) ->
         failwithf "oauth http failed(%d): %s" st err
   
-  let authorize_interactive app = 
-    match Auth.fetch_request_token app.App.consumer with
+  let authorize_interactive ~curl_handle_tweak app = 
+    match Auth.fetch_request_token ~curl_handle_tweak app.App.consumer with
     | `Ok (url, req_resp_token) ->
         print_endline & "Please grant access to " ^ app.App.name ^ " and get a PIN at :";
         print_endline & "  " ^ url;
         print_string "Give me a PIN: "; flush stdout;
         let verif = read_line () in
-        let username, t = authorize app (req_resp_token, verif) in
+        let username, t = authorize ~curl_handle_tweak app (req_resp_token, verif) in
         print_endline ("Grant Success! Hello, @"^username^" !");
         username, t
     | `Error (`Http (st, err)) ->
@@ -115,9 +115,9 @@ module Single = struct
       token_secret = secret;
       verif        = verif }
 
-  let oauth path app = 
+  let oauth ~curl_handle_tweak path app = 
     let user = try load path with _ -> 
-      let _username, t = Auth.authorize_interactive app in
+      let _username, t = Auth.authorize_interactive ~curl_handle_tweak app in
       save path t;
       t
     in

@@ -3,6 +3,9 @@ open Spotlib.Spot
 module Spot = Spotlib.Spot
 open Twitter
 open Util
+
+let curl_handle_tweak _ = ()
+
 module TTS = GoogleTTS
 
 module Consumer = Auth.Consumer
@@ -73,7 +76,7 @@ module Auth = struct
 
   let authorize app (_, verif as verified_token : VerifiedToken.t) = 
     let app_consumer = app.App.consumer in
-    match Auth.fetch_access_token app_consumer verified_token with
+    match Auth.fetch_access_token ~curl_handle_tweak app_consumer verified_token with
     | `Ok (username, token) ->
         let oauth = Auth.oauth app_consumer (token, verif) in
         username, { User.token = oauth.Oauth.access_token;
@@ -83,7 +86,7 @@ module Auth = struct
         failwithf "oauth http failed(%d): %s" st err
   
   let authorize_interactive app = 
-    match Auth.fetch_request_token app.App.consumer with
+    match Auth.fetch_request_token ~curl_handle_tweak app.App.consumer with
     | `Ok (url, req_resp_token) ->
         print_endline & "Please grant access to " ^ app.App.name ^ " and get a PIN at :";
         print_endline & "  " ^ url;
@@ -133,13 +136,15 @@ let get_oauth () = match !cached_oauth with
       let oauth = Auth.Single.oauth !config_file Auth.App.ocamltter in
       cached_oauth := Some oauth;
       oauth
+
+let get_handle () = { Api11.oauth = get_oauth (); curl_handle_tweak }
       
 let setup () = 
   prerr_endline "getting oauth...";
   cached_oauth := None;
-  let o = get_oauth () in
+  let h = get_handle () in
   prerr_endline "oauth done";
-  o
+  h
 
 open Api_intf
 open Api11
@@ -205,14 +210,14 @@ let tw_compare (t1 : Tweet.t) t2 =
 let tw_sort = List.sort tw_compare
 
 let get_timeline ?(c=20) ?since_id verbose =
-  let o = get_oauth () in
+  let h = get_handle () in
   try
     let tl1 =
       let search word =
         if verbose then
           (print_string (!%"searching with '%s'... " word); flush stdout);
         let  ts = default []
-          & Search.tweets o ~count:c ?since_id word >>| fun x -> x#statuses in
+          & Search.tweets h ~count:c ?since_id word >>| fun x -> x#statuses in
         if verbose then
           (print_endline (!%"%d" (List.length ts)); flush stdout);
         ts
@@ -223,7 +228,7 @@ let get_timeline ?(c=20) ?since_id verbose =
       if verbose then (print_endline "loading..."; flush stdout);
       List.filter OConfig.filter
       & default []
-      & Timelines.home_timeline ~count:c (get_oauth ())
+      & Timelines.home_timeline ~count:c h
     in
     tw_sort (tl1 @ tl2)
   with
@@ -246,21 +251,21 @@ let reload () = get_timeline true
 
 let l ?(c=20) ?u (* ?page *) () : tweet list =
   print_endline "loading..."; flush stdout;
-  let o = get_oauth () in
+  let h = get_handle () in
   tw_sort & default [] & match u with
-  | None -> Timelines.home_timeline ~count:c o
-  | Some screen_name -> Timelines.user_timeline ~count:c ~screen_name o
+  | None -> Timelines.home_timeline ~count:c h
+  | Some screen_name -> Timelines.user_timeline ~count:c ~screen_name h
 
 let lc (* ?page *) count = l ~c:count (* ?page *) ()
 let lu (* ?page *) user  = l ~u:user  (* ?page *) ()
 
 let m ?(c=20) () : tweet list =
-  let o = get_oauth () in
+  let h = get_handle () in
   print_endline "loading..."; flush stdout;
-  tw_sort & default [] & Timelines.mentions_timeline ~count:c o
+  tw_sort & default [] & Timelines.mentions_timeline ~count:c h
 
 let kwsk id =
-  let o = get_oauth () in
+  let o = get_handle () in
   let rec iter store id =
     match Tweets.show o id with
     | `Error _ -> store
@@ -272,11 +277,11 @@ let kwsk id =
   iter [] id
     
 let u text =
-  let o = get_oauth () in
+  let o = get_handle () in
   from_Ok & Tweets.update o text >>| fun x -> x#id
 
 let show id =
-  let o = get_oauth () in
+  let o = get_handle () in
   Tweets.show o id |> from_Ok
 
 let get_screen_name id =
@@ -286,28 +291,28 @@ let get_screen_name id =
   |> fun u -> u#screen_name
 
 let re status_id text =
-  let o = get_oauth () in
+  let o = get_handle () in
   let name = get_screen_name status_id in
   Tweets.update o ~in_reply_to_status_id:status_id ("@" ^ name ^ " " ^ text)
   |> from_Ok |> fun x -> x#id
 
 let rt status_id =
-  let o = get_oauth () in
+  let o = get_handle () in
   from_Ok
   & Tweets.retweet o status_id >>| fun x -> x#id
 
 let del id = 
-  let o = get_oauth () in
+  let o = get_handle () in
   Tweets.destroy o id |> from_Ok |> ignore
 
 let qt st_id comment =
-  let o = get_oauth () in
+  let o = get_handle () in
   Tweets.show o st_id
   |> from_Ok |> fun tw -> 
     u (!%"%s QT @%s: %s" comment (from_Some tw#user#details)#screen_name tw#text)
 
 let link id =
-  let o = get_oauth () in
+  let o = get_handle () in
   Tweets.show o id 
   |> from_Ok |> fun tw -> 
     !%"http://twitter.com/%s/status/%Ld" (from_Some tw#user#details)#screen_name id
@@ -316,29 +321,29 @@ let qtlink id s =
   link id |> fun url -> u @@ s ^ " QT " ^ url;;
 
 let reqt st_id comment =
-  let o = get_oauth () in
+  let o = get_handle () in
   Tweets.show o st_id 
   |> from_Ok |> fun tw -> 
     re st_id & !%"%s QT @%s: %s" comment (from_Some tw#user#details)#screen_name tw#text
 
-let follow sname = Friendships.create ~screen_name:sname (get_oauth ()) |> from_Ok
-let unfollow sname = Friendships.destroy ~screen_name:sname (get_oauth ()) |> from_Ok
+let follow sname = Friendships.create ~screen_name:sname (get_handle ()) |> from_Ok
+let unfollow sname = Friendships.destroy ~screen_name:sname (get_handle ()) |> from_Ok
 
-let favs screen_name = Favorites.list ~screen_name (get_oauth ()) |> from_Ok
+let favs screen_name = Favorites.list ~screen_name (get_handle ()) |> from_Ok
 
-let fav id = Favorites.create (get_oauth ()) id |> from_Ok |> fun x -> x#id
-let unfav id = Favorites.destroy (get_oauth ()) id |> from_Ok |> fun x -> x#id
+let fav id = Favorites.create (get_handle ()) id |> from_Ok |> fun x -> x#id
+let unfav id = Favorites.destroy (get_handle ()) id |> from_Ok |> fun x -> x#id
 let frt id = ignore & fav id; rt id
 
 let report_spam sname = 
-  SpamReporting.report_spam (get_oauth ()) ~screen_name: sname |> from_Ok
+  SpamReporting.report_spam (get_handle ()) ~screen_name: sname |> from_Ok
 
 let s word = 
-  let o = get_oauth () in
+  let o = get_handle () in
   Search.tweets o ~count:100 word  
   |> from_Ok |> fun x -> x#statuses
 
-let limit_status () = Help.rate_limit_status (get_oauth ()) |> from_Ok
+let limit_status () = Help.rate_limit_status (get_handle ()) |> from_Ok
 
 
 let help =

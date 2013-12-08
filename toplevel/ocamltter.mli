@@ -50,7 +50,8 @@ end
 
 val config_file : string ref
 val get_oauth : unit -> Oauth.t
-val setup : unit -> Oauth.t
+val get_handle : unit -> Api11.handle
+val setup : unit -> Api11.handle
 val tw_sort : tweet list -> tweet list
 val get_timeline : ?c:int -> ?since_id:status_id -> bool ->
   tweet list

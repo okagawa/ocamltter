@@ -5,7 +5,7 @@ type signature_method = [ `Hmac_sha1
 
 val fetch_request_token : 
   ?http_method:Http.meth 
-  -> ?handle_tweak:(Curl.handle -> unit)
+  -> curl_handle_tweak:(Curl.handle -> unit)
   -> host:string 
   -> ?port:int
   -> path:string 
@@ -26,7 +26,7 @@ val fetch_access_token :
   -> oauth_token_secret:string 
 
   -> ?http_method:Http.meth 
-  -> ?handle_tweak:(Curl.handle -> unit)
+  -> curl_handle_tweak:(Curl.handle -> unit)
   -> host:string 
   -> ?port:int
   -> path:string 
@@ -49,7 +49,8 @@ type t = {
 } with conv(ocaml)
 
 val access :
-  [ `HTTP | `HTTPS ]
+  curl_handle_tweak:(Curl.handle -> unit)
+  -> [ `HTTP | `HTTPS ]
   -> t 
   -> Http.meth 
   -> string (** host *)

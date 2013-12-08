@@ -39,13 +39,20 @@ module Error = struct
           s
 end
 
+(** {6 The Handle} *)
+
+type handle = {
+  oauth : Oauth.t;
+  curl_handle_tweak : Curl.handle -> unit
+}
+
 (** {6 Base communication} *)
 
 (* Api 1.1 seems to requir https *)
-let twitter oauth ?(host="api.twitter.com") meth cmd params =
+let twitter h ?(host="api.twitter.com") meth cmd params =
   (* prerr_endline cmd; *)
   (* List.iter (fun (k,v) -> Format.eprintf "%s=%s@." k v) params; *)
-  Auth.access `HTTPS oauth meth host cmd params >>= fun s -> 
+  Auth.access ~curl_handle_tweak:h.curl_handle_tweak `HTTPS h.oauth meth host cmd params >>= fun s -> 
   Result.catch (fun ~fail -> try Json.parse s with e -> fail (`Json_parse (e,s)))
       
 
@@ -60,18 +67,18 @@ let json_error_wrap f v = match v with
       | `Error e -> `Error (`Json e)
 
 (** 
-  [api post meth fmt ...(format args)... params oauth] 
+  [api post meth fmt ...(format args)... params handle] 
 
   post : Parser of JSON. If you want to have the raw JSON, use [fun x -> `Ok x].
   meth : GET or POST
   fmt  : piece of path, you can use Printf % format
   params : the type is [params]
-  oauth : OAuth value
+  handle : oauth and Curl handler
       
 *)
-let api post meth fmt = fun params oauth -> 
+let api post meth fmt = fun params h -> 
   Printf.ksprintf (fun name ->
-    twitter oauth meth ~host:"api.twitter.com" (!% "/1.1/%s" name) ~?params
+    twitter h meth ~host:"api.twitter.com" (!% "/1.1/%s" name) ~?params
     |> json_error_wrap post) fmt
 
 (** { 6 Argment handling } *)
@@ -194,18 +201,18 @@ module Arg = struct
   (** { 7 Required argument generators } *)
 
   (*
-    val <name> : (params -> Oauth.t -> 'a)  ->  (params -> Oauth.t -> t -> 'a)
+    val <name> : (params -> handle -> 'a)  ->  (params -> handle -> t -> 'a)
 
-    They are to add new required arguments just after [Oauth.t].
+    They are to add new required arguments just after [handle].
 
     This must go at the end of argument generator compositions.
   *)
 
-  let required_args f (params : params) (oauth : Oauth.t) addition = 
-    f (addition @ params) oauth
+  let required_args f (params : params) handle addition = 
+    f (addition @ params) handle
 
-  let required_arg make_addition = fun f (params : params) (oauth : Oauth.t) x -> 
-    f (make_addition x @  params) oauth
+  let required_arg make_addition = fun f (params : params) handle x -> 
+    f (make_addition x @  params) handle
 
   let required_status = fun x -> x |> 
       required_arg (fun status -> [ "status", of_string (Some status) ])
@@ -227,6 +234,7 @@ module Cursor : sig
 
   (* I know you do not understand this type. *)    
   val streaming : 
+
     Http.meth 
 
     -> ( ('elem, Error.t) Result.t Stream.t -> 'final_result) 
@@ -240,7 +248,7 @@ module Cursor : sig
 
     -> string  (** url piece. CR jfuruse: no printf interface? *)
 
-    -> ((params -> Oauth.t -> 'final_result) -> params -> 'the_function_type)
+    -> ((params -> handle -> 'final_result) -> params -> 'the_function_type)
     (** argument accumulator *)
 
     -> 'the_function_type
@@ -255,11 +263,11 @@ end = struct
   } with conv(json, ocaml)
 
   let streaming meth k dec acc s optf =
-    optf (fun params oauth ->
+    optf (fun params h ->
       let (!!) = Lazy.force in
       let rec loop cursor = lazy (
         let params = ("cursor", of_string cursor) :: params in
-        match api (fun x -> `Ok x) meth "%s" params (oauth : Oauth.t) s with
+        match api (fun x -> `Ok x) meth "%s" params h s with
         | `Error e -> !! (Stream.singleton (`Error e))
         | `Ok json ->
             match t_of_json dec json with
@@ -282,12 +290,12 @@ module SinceMaxID = struct
   open Stream
 
   (* count: max number possible *)
-  let create_stream f ~count ?since_id ?max_id o = 
+  let create_stream f ~count ?since_id ?max_id h = 
     let (!!) = Lazy.force in
     let rec loop ~since_id ~max_id = lazy (
       if Spotlib.Option.liftM2 (>) since_id max_id = Some true then !!null
       else begin
-        match f ?count:(Some count) ?since_id ?max_id (o : Oauth.t) with
+        match f ?count:(Some count) ?since_id ?max_id h with
         | `Error e -> !!(Stream.singleton (`Error e))
         | `Ok [] ->  !!Stream.null
         | `Ok xs ->
@@ -340,7 +348,7 @@ module Timelines = struct (* CR jfuruse: or Statuses ? *)
     ?trim_user ?contributor_details ?include_entities =
     SinceMaxID.create_stream ~count:200
     & mentions_timeline
-      ?trim_user ?contributor_details ?include_entities
+      ?trim_user ?contributor_details ?include_entities 
 
   let user_timeline = get Tweet.ts_of_json "statuses/user_timeline.json"
     &  count
@@ -495,7 +503,7 @@ module Friendships = struct
 
   type ts = t list with conv(json, ocaml)
 
-  let lookup ?screen_name ?user_id oauth =
+  let lookup ?screen_name ?user_id handle =
     api ts_of_json GET "friendships/lookup.json"
       [ "screen_name", 
         Option.map (String.concat ",") screen_name
@@ -503,7 +511,7 @@ module Friendships = struct
       ; "user_id", 
         Option.map (String.concat "," ** List.map Int64.to_string) user_id
       ]
-      oauth
+      handle
 
   type ids = {
     ids : int64 list;

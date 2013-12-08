@@ -218,7 +218,7 @@ let string_of_protocol = function
   | `HTTPS -> "https"
 
 let gen_access
-    ?handle_tweak
+    ~curl_handle_tweak
     ~protocol
     ~http_method ~host ?port ~path
     ?(oauth_version = "1.0") 
@@ -248,7 +248,7 @@ let gen_access
       (oauth_other_params @ non_oauth_params)
   in
   Http.by_curl 
-    ?handle_tweak
+    ~curl_handle_tweak
     http_method protocol host ?port path ~headers:[header] ~params:non_oauth_params
 
 let fetch_request_token ?(http_method=POST) = 
@@ -269,8 +269,8 @@ type t = {
   access_token_secret:string;
 } with conv(ocaml)
 
-let access proto oauth meth host path params =
-  access_resource ~protocol:proto ~http_method:meth ~host:host ~path:path
+let access ~curl_handle_tweak proto oauth meth host path params =
+  access_resource ~curl_handle_tweak ~protocol:proto ~http_method:meth ~host:host ~path:path
     ~oauth_consumer_key:oauth.consumer_key
     ~oauth_consumer_secret:oauth.consumer_secret
     ~oauth_token:oauth.access_token
