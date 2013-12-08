@@ -126,9 +126,6 @@ let by_curl ~curl_handle_tweak meth proto hostname ?port path ~params:ps ~header
   assert (h#get_cookielist = []);
   h#set_writefunction (fun s -> Buffer.add_string buf s; String.length s);
   (* Tweak h by the hanlder *)
-(*
-  (match curl_handle_tweak with Some f -> f h | None -> ());
-*)
   curl_handle_tweak h;
   h#perform;
   let code = h#get_httpcode in
